@@ -1,0 +1,1 @@
+<?php header("Location: editor/examples/inline-editing/preschool_grades.php"); ?>

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Progress Report</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.0/js/bootstrap.min.js"></script>
+</head>
+<body>
+<div class="container">
+<?php
+$servername = "localhost";
+$username = "root";
+$password = "Q1w2e3r4";
+$dbname = "opensis";
+$student_id = 249;
+
+// Create connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+// Check connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+} 
+
+$periods_sql = "select distinct course_period_id from student_report_card_grades";
+$periods_result = $conn->query($periods_sql);
+if ($periods_result->num_rows > 0) {
+    // output data of each row
+    while($periods_row = $periods_result->fetch_assoc()) {
+		$period = $periods_row["course_period_id"];
+		// $sql = "SELECT student_report_card_grades.student_id as student_id, students.last_name as last_name, students.first_name as first_name, students.middle_name as middle_name, student_report_card_grades.course_title as title, concat (staff.first_name, ' ', staff.last_name) as teacher FROM student_report_card_grades left join students on student_report_card_grades.student_id = students.student_id left join course_periods on student_report_card_grades.course_period_id = course_periods.course_period_id left join staff on course_periods.teacher_id = staff.staff_id where student_report_card_grades.student_id = $student_id where student_report_card_grades.course_period_id = $period";
+		$sql = "SELECT student_report_card_grades.student_id as student_id, students.last_name as last_name, students.first_name as first_name, students.middle_name as middle_name, student_report_card_grades.course_title as title, concat (staff.first_name, ' ', staff.last_name) as teacher FROM student_report_card_grades left join students on student_report_card_grades.student_id = students.student_id left join course_periods on student_report_card_grades.course_period_id = course_periods.course_period_id left join staff on course_periods.teacher_id = staff.staff_id";
+		$result = $conn->query($sql);
+
+		if ($result->num_rows > 0) {
+			// output data of each row
+			while($row = $result->fetch_assoc()) {
+				?>
+				<table class="table table-bordered" style="width:34%">
+					<tr><td>ID</td><td><?php echo $row["student_id"] ?></td></tr>
+					<tr><td>Name</td><td><?php echo $row["first_name"].' '.$row["middle_name"].' '.$row["last_name"] ?></td></tr>
+					<tr><td>Subject</td><td><?php echo $row["title"] ?></td></tr>
+					<tr><td>Teacher</td><td><?php echo $row["teacher"] ?></td></tr>
+				</table>
+				<table class="table table-bordered">
+				<tr class="active"><td>Assignment</td><td>Score</td><td>Items</td></tr>
+				<?php
+				$initial_grade = 0; $quarterly_grade = 0;
+				$grades_student_id = $row["student_id"];
+				$types_sql = "select distinct gradebook_assignment_types.assignment_type_id as type, gradebook_assignment_types.title as title, gradebook_assignment_types.final_grade_percent as percent from gradebook_grades left join gradebook_assignments on gradebook_grades.assignment_id = gradebook_assignments.assignment_id left join gradebook_assignment_types on gradebook_assignments.assignment_type_id = gradebook_assignment_types.assignment_type_id where gradebook_grades.student_id = $grades_student_id and gradebook_grades.course_period_id = $period";
+				$types_result = $conn->query($types_sql);
+				if ($types_result->num_rows > 0) {
+					while($types_row = $types_result->fetch_assoc()) {
+						$total_score = 0; $total_items = 0;
+						$type = $types_row["type"];
+						$grades_sql = "select gradebook_assignments.title as assignment, gradebook_grades.points as score, gradebook_assignments.points as items from gradebook_grades left join gradebook_assignments on gradebook_grades.assignment_id = gradebook_assignments.assignment_id left join gradebook_assignment_types on gradebook_assignments.assignment_type_id = gradebook_assignment_types.assignment_type_id where gradebook_grades.student_id = $grades_student_id and gradebook_assignment_types.assignment_type_id = $type and gradebook_grades.course_period_id = $period";
+						$grades_result = $conn->query($grades_sql);
+						if ($grades_result->num_rows > 0) {
+							while($grades_row = $grades_result->fetch_assoc()) {
+								$total_score = $total_score + $grades_row["score"];
+								$total_items = $total_items + $grades_row["items"];
+								?>
+									<tr><td><?php echo $grades_row["assignment"] ?></td><td><?php echo number_format($grades_row["score"],0) ?></td><td><?php echo $grades_row["items"] ?></td></tr>
+								<?php
+							}
+						}
+					?>
+					<tr class="warning"><td><?php echo $types_row["title"].' Total' ?></td><td><?php echo $total_score ?></td><td><?php echo $total_items ?></td></tr>
+					<tr class="info"><td><?php echo $types_row["title"].' PS/WS' ?></td><td><?php echo number_format( ( ( $total_score / $total_items ) * 100 ), 2 ) ?></td><td><?php echo number_format( ( ( ( $total_score / $total_items ) * $types_row["percent"] ) * 100 ), 2 ) ?></td></tr>
+					<?php
+					$initial_grade = $initial_grade + ( ( ( $total_score / $total_items ) * $types_row["percent"] ) * 100 );
+
+					}
+				}
+				
+				$trans_sql = "SELECT * FROM `report_card_grades` WHERE grade_scale_id = 1 ORDER BY `report_card_grades`.`break_off` ASC";
+				$trans_result = $conn->query($trans_sql);
+				if ($trans_result->num_rows > 0) {
+					while($trans_row = $trans_result->fetch_assoc()) {
+						if( $trans_row["break_off"] <= $initial_grade ) {
+							$quarterly_grade = $trans_row["title"];
+						}
+					}
+				}
+				?>
+				<tr class="success"><td><?php echo 'Initial Grade / Quarterly Grade' ?></td><td><?php echo number_format( $initial_grade, 2 ) ?></td><td><?php echo number_format( $quarterly_grade, 2 ) ?></td></tr>
+				</table>
+				<?php
+			}
+		}
+	}
+} else {
+	echo "0 results";
+}
+$conn->close();
+?>
+</div>
+</body>
+</html>
